@@ -14,6 +14,10 @@
 // You should have received a copy of the GNU General Public License
 // along with Parity.  If not, see <http://www.gnu.org/licenses/>.
 
+extern crate bn;
+extern crate parity_bytes as bytes;
+extern crate rustc_hex;
+
 use std::io::{self, Read};
 
 use bytes::BytesRef;
@@ -24,12 +28,6 @@ pub struct Error(pub &'static str);
 impl From<&'static str> for Error {
 	fn from(val: &'static str) -> Self {
 		Error(val)
-	}
-}
-
-impl Into<::vm::Error> for Error {
-	fn into(self) -> ::vm::Error {
-		::vm::Error::BuiltIn(self.0)
 	}
 }
 
@@ -59,9 +57,8 @@ fn read_point(reader: &mut io::Chain<&[u8], io::Repeat>) -> Result<::bn::G1, Err
 	)
 }
 
-impl Impl for Bn128AddImpl {
 	// Can fail if any of the 2 points does not belong the bn128 curve
-	fn execute(&self, input: &[u8], output: &mut BytesRef) -> Result<(), Error> {
+	pub fn bn128_add(input: &[u8], output: &mut BytesRef) -> Result<(), Error> {
 		use bn::AffineG1;
 
 		let mut padded_input = input.chain(io::repeat(0));
@@ -78,11 +75,9 @@ impl Impl for Bn128AddImpl {
 
 		Ok(())
 	}
-}
 
-impl Impl for Bn128MulImpl {
 	// Can fail if first paramter (bn128 curve point) does not actually belong to the curve
-	fn execute(&self, input: &[u8], output: &mut BytesRef) -> Result<(), Error> {
+	pub fn bn128_mul(input: &[u8], output: &mut BytesRef) -> Result<(), Error> {
 		use bn::AffineG1;
 
 		let mut padded_input = input.chain(io::repeat(0));
@@ -98,33 +93,22 @@ impl Impl for Bn128MulImpl {
 		output.write(0, &write_buf);
 		Ok(())
 	}
-}
 
-impl Impl for Bn128PairingImpl {
+
 	/// Can fail if:
 	///     - input length is not a multiple of 192
 	///     - any of odd points does not belong to bn128 curve
 	///     - any of even points does not belong to the twisted bn128 curve over the field F_p^2 = F_p[i] / (i^2 + 1)
-	fn execute(&self, input: &[u8], output: &mut BytesRef) -> Result<(), Error> {
+	pub fn bn128_pairing(input: &[u8], output: &mut BytesRef) -> Result<(), Error> {
+		use bn::{AffineG1, AffineG2, Fq, Fq2, pairing, G1, G2, Gt, Group};
+
 		if input.len() % 192 != 0 {
 			return Err("Invalid input length, must be multiple of 192 (3 * (32*2))".into())
 		}
 
-		if let Err(err) = self.execute_with_error(input, output) {
-			trace!("Pairining error: {:?}", err);
-			return Err(err)
-		}
-		Ok(())
-	}
-}
-
-impl Bn128PairingImpl {
-	fn execute_with_error(&self, input: &[u8], output: &mut BytesRef) -> Result<(), Error> {
-		use bn::{AffineG1, AffineG2, Fq, Fq2, pairing, G1, G2, Gt, Group};
-
 		let elements = input.len() / 192; // (a, b_a, b_b - each 64-byte affine coordinates)
 		let ret_val = if input.len() == 0 {
-			U256::one()
+			bn::arith::U256::one()
 		} else {
 			let mut vals = Vec::new();
 			for idx in 0..elements {
@@ -164,9 +148,9 @@ impl Bn128PairingImpl {
 			let mul = vals.into_iter().fold(Gt::one(), |s, (a, b)| s * pairing(a, b));
 
 			if mul == Gt::one() {
-				U256::one()
+				bn::arith::U256::one()
 			} else {
-				U256::zero()
+				bn::arith::U256::zero()
 			}
 		};
 
@@ -176,22 +160,15 @@ impl Bn128PairingImpl {
 
 		Ok(())
 	}
-}
 
 #[cfg(test)]
 mod tests {
+	use super::{bn128_add, bn128_mul, bn128_pairing};
 	use bytes::BytesRef;
 	use rustc_hex::FromHex;
 
 	#[test]
-	fn bn128_add() {
-
-		let f = Builtin {
-			pricer: Box::new(Linear { base: 0, word: 0 }),
-			native: ethereum_builtin("alt_bn128_add"),
-			activate_at: 0,
-		};
-
+	fn test_bn128_add() {
 		// zero-points additions
 		{
 			let input = FromHex::from_hex("\
@@ -207,7 +184,7 @@ mod tests {
 				0000000000000000000000000000000000000000000000000000000000000000"
 			).unwrap();
 
-			f.execute(&input[..], &mut BytesRef::Fixed(&mut output[..])).expect("Builtin should not fail");
+			bn128_add(&input[..], &mut BytesRef::Fixed(&mut output[..])).expect("Builtin should not fail");
 			assert_eq!(output, expected);
 		}
 
@@ -222,7 +199,7 @@ mod tests {
 				0000000000000000000000000000000000000000000000000000000000000000"
 			).unwrap();
 
-			f.execute(&input[..], &mut BytesRef::Fixed(&mut output[..])).expect("Builtin should not fail");
+			bn128_add(&input[..], &mut BytesRef::Fixed(&mut output[..])).expect("Builtin should not fail");
 			assert_eq!(output, expected);
 		}
 
@@ -237,20 +214,13 @@ mod tests {
 
 			let mut output = vec![0u8; 64];
 
-			let res = f.execute(&input[..], &mut BytesRef::Fixed(&mut output[..]));
+			let res = bn128_add(&input[..], &mut BytesRef::Fixed(&mut output[..]));
 			assert!(res.is_err(), "There should be built-in error here");
 		}
 	}
 
 	#[test]
-	fn bn128_mul() {
-
-		let f = Builtin {
-			pricer: Box::new(Linear { base: 0, word: 0 }),
-			native: ethereum_builtin("alt_bn128_mul"),
-			activate_at: 0,
-		};
-
+	fn test_bn128_mul() {
 		// zero-point multiplication
 		{
 			let input = FromHex::from_hex("\
@@ -265,7 +235,7 @@ mod tests {
 				0000000000000000000000000000000000000000000000000000000000000000"
 			).unwrap();
 
-			f.execute(&input[..], &mut BytesRef::Fixed(&mut output[..])).expect("Builtin should not fail");
+			bn128_mul(&input[..], &mut BytesRef::Fixed(&mut output[..])).expect("Builtin should not fail");
 			assert_eq!(output, expected);
 		}
 
@@ -279,32 +249,24 @@ mod tests {
 
 			let mut output = vec![0u8; 64];
 
-			let res = f.execute(&input[..], &mut BytesRef::Fixed(&mut output[..]));
+			let res = bn128_mul(&input[..], &mut BytesRef::Fixed(&mut output[..]));
 			assert!(res.is_err(), "There should be built-in error here");
 		}
 	}
 
-	fn builtin_pairing() -> Builtin {
-		Builtin {
-			pricer: Box::new(Linear { base: 0, word: 0 }),
-			native: ethereum_builtin("alt_bn128_pairing"),
-			activate_at: 0,
-		}
-	}
-
-	fn empty_test(f: Builtin, expected: Vec<u8>) {
+	fn pairing_empty_test(expected: Vec<u8>) {
 		let mut empty = [0u8; 0];
 		let input = BytesRef::Fixed(&mut empty);
 
 		let mut output = vec![0u8; expected.len()];
 
-		f.execute(&input[..], &mut BytesRef::Fixed(&mut output[..])).expect("Builtin should not fail");
+		bn128_pairing(&input[..], &mut BytesRef::Fixed(&mut output[..])).expect("Builtin should not fail");
 		assert_eq!(output, expected);
 	}
 
-	fn error_test(f: Builtin, input: &[u8], msg_contains: Option<&str>) {
+	fn pairing_error_test(input: &[u8], msg_contains: Option<&str>) {
 		let mut output = vec![0u8; 64];
-		let res = f.execute(input, &mut BytesRef::Fixed(&mut output[..]));
+		let res = bn128_pairing(input, &mut BytesRef::Fixed(&mut output[..]));
 		if let Some(msg) = msg_contains {
 			if let Err(e) = res {
 				if !e.0.contains(msg) {
@@ -323,8 +285,7 @@ mod tests {
 	#[test]
 	fn bn128_pairing_empty() {
 		// should not fail, because empty input is a valid input of 0 elements
-		empty_test(
-			builtin_pairing(),
+		pairing_empty_test(
 			bytes("0000000000000000000000000000000000000000000000000000000000000001"),
 		);
 	}
@@ -332,8 +293,7 @@ mod tests {
 	#[test]
 	fn bn128_pairing_notcurve() {
 		// should fail - point not on curve
-		error_test(
-			builtin_pairing(),
+		pairing_error_test(
 			&bytes("\
 				1111111111111111111111111111111111111111111111111111111111111111\
 				1111111111111111111111111111111111111111111111111111111111111111\
@@ -349,8 +309,7 @@ mod tests {
 	#[test]
 	fn bn128_pairing_fragmented() {
 		// should fail - input length is invalid
-		error_test(
-			builtin_pairing(),
+		pairing_error_test(
 			&bytes("\
 				1111111111111111111111111111111111111111111111111111111111111111\
 				1111111111111111111111111111111111111111111111111111111111111111\
