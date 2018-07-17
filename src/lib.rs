@@ -69,7 +69,7 @@ fn read_point(reader: &mut io::Chain<&[u8], io::Repeat>) -> Result<::bn::G1, Err
 		if let Some(sum) = AffineG1::from_jacobian(p1 + p2) {
 			// point not at infinity
 			sum.x().to_big_endian(&mut write_buf[0..32]).expect("Cannot fail since 0..32 is 32-byte length");
-			sum.y().to_big_endian(&mut write_buf[32..64]).expect("Cannot fail since 32..64 is 32-byte length");;
+			sum.y().to_big_endian(&mut write_buf[32..64]).expect("Cannot fail since 32..64 is 32-byte length");
 		}
 		output.write(0, &write_buf);
 
@@ -88,7 +88,7 @@ fn read_point(reader: &mut io::Chain<&[u8], io::Repeat>) -> Result<::bn::G1, Err
 		if let Some(sum) = AffineG1::from_jacobian(p * fr) {
 			// point not at infinity
 			sum.x().to_big_endian(&mut write_buf[0..32]).expect("Cannot fail since 0..32 is 32-byte length");
-			sum.y().to_big_endian(&mut write_buf[32..64]).expect("Cannot fail since 32..64 is 32-byte length");;
+			sum.y().to_big_endian(&mut write_buf[32..64]).expect("Cannot fail since 32..64 is 32-byte length");
 		}
 		output.write(0, &write_buf);
 		Ok(())
@@ -155,7 +155,7 @@ fn read_point(reader: &mut io::Chain<&[u8], io::Repeat>) -> Result<::bn::G1, Err
 		};
 
 		let mut buf = [0u8; 32];
-		ret_val.to_big_endian(&mut buf);
+		ret_val.to_big_endian(&mut buf).expect("Cannot fail since 0..32 is 32-byte length");;
 		output.write(0, &buf);
 
 		Ok(())
