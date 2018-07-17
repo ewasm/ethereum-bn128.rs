@@ -1,0 +1,14 @@
+[package]
+name = "ethereum-bn128"
+version = "0.0.1"
+authors = ["Parity Technologies <admin@parity.io>","Alex Beregszaszi <alex@rtfs.hu>"]
+license = "GPL-3.0"
+repository = "https://github.com/ewasm/ethereum-bn128.rs"
+description = "Ethereum BN128 helpers for Rust"
+publish = false
+
+[dependencies]
+bn = { git = "https://github.com/paritytech/bn", default-features = false }
+ethereum-types = "0.3"
+parity-bytes = { git = "https://github.com/paritytech/parity-common" }
+rustc-hex = "1.0"
