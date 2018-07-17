@@ -57,109 +57,109 @@ fn read_point(reader: &mut io::Chain<&[u8], io::Repeat>) -> Result<::bn::G1, Err
 	)
 }
 
-	// Can fail if any of the 2 points does not belong the bn128 curve
-	pub fn bn128_add(input: &[u8], output: &mut BytesRef) -> Result<(), Error> {
-		use bn::AffineG1;
+// Can fail if any of the 2 points does not belong the bn128 curve
+pub fn bn128_add(input: &[u8], output: &mut BytesRef) -> Result<(), Error> {
+	use bn::AffineG1;
 
-		let mut padded_input = input.chain(io::repeat(0));
-		let p1 = read_point(&mut padded_input)?;
-		let p2 = read_point(&mut padded_input)?;
+	let mut padded_input = input.chain(io::repeat(0));
+	let p1 = read_point(&mut padded_input)?;
+	let p2 = read_point(&mut padded_input)?;
 
-		let mut write_buf = [0u8; 64];
-		if let Some(sum) = AffineG1::from_jacobian(p1 + p2) {
-			// point not at infinity
-			sum.x().to_big_endian(&mut write_buf[0..32]).expect("Cannot fail since 0..32 is 32-byte length");
-			sum.y().to_big_endian(&mut write_buf[32..64]).expect("Cannot fail since 32..64 is 32-byte length");
-		}
-		output.write(0, &write_buf);
+	let mut write_buf = [0u8; 64];
+	if let Some(sum) = AffineG1::from_jacobian(p1 + p2) {
+		// point not at infinity
+		sum.x().to_big_endian(&mut write_buf[0..32]).expect("Cannot fail since 0..32 is 32-byte length");
+		sum.y().to_big_endian(&mut write_buf[32..64]).expect("Cannot fail since 32..64 is 32-byte length");
+	}
+	output.write(0, &write_buf);
 
-		Ok(())
+	Ok(())
+}
+
+// Can fail if first paramter (bn128 curve point) does not actually belong to the curve
+pub fn bn128_mul(input: &[u8], output: &mut BytesRef) -> Result<(), Error> {
+	use bn::AffineG1;
+
+	let mut padded_input = input.chain(io::repeat(0));
+	let p = read_point(&mut padded_input)?;
+	let fr = read_fr(&mut padded_input)?;
+
+	let mut write_buf = [0u8; 64];
+	if let Some(sum) = AffineG1::from_jacobian(p * fr) {
+		// point not at infinity
+		sum.x().to_big_endian(&mut write_buf[0..32]).expect("Cannot fail since 0..32 is 32-byte length");
+		sum.y().to_big_endian(&mut write_buf[32..64]).expect("Cannot fail since 32..64 is 32-byte length");
+	}
+	output.write(0, &write_buf);
+	Ok(())
+}
+
+
+/// Can fail if:
+///     - input length is not a multiple of 192
+///     - any of odd points does not belong to bn128 curve
+///     - any of even points does not belong to the twisted bn128 curve over the field F_p^2 = F_p[i] / (i^2 + 1)
+pub fn bn128_pairing(input: &[u8], output: &mut BytesRef) -> Result<(), Error> {
+	use bn::{AffineG1, AffineG2, Fq, Fq2, pairing, G1, G2, Gt, Group};
+
+	if input.len() % 192 != 0 {
+		return Err("Invalid input length, must be multiple of 192 (3 * (32*2))".into())
 	}
 
-	// Can fail if first paramter (bn128 curve point) does not actually belong to the curve
-	pub fn bn128_mul(input: &[u8], output: &mut BytesRef) -> Result<(), Error> {
-		use bn::AffineG1;
+	let elements = input.len() / 192; // (a, b_a, b_b - each 64-byte affine coordinates)
+	let ret_val = if input.len() == 0 {
+		bn::arith::U256::one()
+	} else {
+		let mut vals = Vec::new();
+		for idx in 0..elements {
+			let a_x = Fq::from_slice(&input[idx*192..idx*192+32])
+				.map_err(|_| Error::from("Invalid a argument x coordinate"))?;
 
-		let mut padded_input = input.chain(io::repeat(0));
-		let p = read_point(&mut padded_input)?;
-		let fr = read_fr(&mut padded_input)?;
+			let a_y = Fq::from_slice(&input[idx*192+32..idx*192+64])
+				.map_err(|_| Error::from("Invalid a argument y coordinate"))?;
 
-		let mut write_buf = [0u8; 64];
-		if let Some(sum) = AffineG1::from_jacobian(p * fr) {
-			// point not at infinity
-			sum.x().to_big_endian(&mut write_buf[0..32]).expect("Cannot fail since 0..32 is 32-byte length");
-			sum.y().to_big_endian(&mut write_buf[32..64]).expect("Cannot fail since 32..64 is 32-byte length");
-		}
-		output.write(0, &write_buf);
-		Ok(())
-	}
+			let b_a_y = Fq::from_slice(&input[idx*192+64..idx*192+96])
+				.map_err(|_| Error::from("Invalid b argument imaginary coeff x coordinate"))?;
 
+			let b_a_x = Fq::from_slice(&input[idx*192+96..idx*192+128])
+				.map_err(|_| Error::from("Invalid b argument imaginary coeff y coordinate"))?;
 
-	/// Can fail if:
-	///     - input length is not a multiple of 192
-	///     - any of odd points does not belong to bn128 curve
-	///     - any of even points does not belong to the twisted bn128 curve over the field F_p^2 = F_p[i] / (i^2 + 1)
-	pub fn bn128_pairing(input: &[u8], output: &mut BytesRef) -> Result<(), Error> {
-		use bn::{AffineG1, AffineG2, Fq, Fq2, pairing, G1, G2, Gt, Group};
+			let b_b_y = Fq::from_slice(&input[idx*192+128..idx*192+160])
+				.map_err(|_| Error::from("Invalid b argument real coeff x coordinate"))?;
 
-		if input.len() % 192 != 0 {
-			return Err("Invalid input length, must be multiple of 192 (3 * (32*2))".into())
-		}
+			let b_b_x = Fq::from_slice(&input[idx*192+160..idx*192+192])
+				.map_err(|_| Error::from("Invalid b argument real coeff y coordinate"))?;
 
-		let elements = input.len() / 192; // (a, b_a, b_b - each 64-byte affine coordinates)
-		let ret_val = if input.len() == 0 {
-			bn::arith::U256::one()
-		} else {
-			let mut vals = Vec::new();
-			for idx in 0..elements {
-				let a_x = Fq::from_slice(&input[idx*192..idx*192+32])
-					.map_err(|_| Error::from("Invalid a argument x coordinate"))?;
-
-				let a_y = Fq::from_slice(&input[idx*192+32..idx*192+64])
-					.map_err(|_| Error::from("Invalid a argument y coordinate"))?;
-
-				let b_a_y = Fq::from_slice(&input[idx*192+64..idx*192+96])
-					.map_err(|_| Error::from("Invalid b argument imaginary coeff x coordinate"))?;
-
-				let b_a_x = Fq::from_slice(&input[idx*192+96..idx*192+128])
-					.map_err(|_| Error::from("Invalid b argument imaginary coeff y coordinate"))?;
-
-				let b_b_y = Fq::from_slice(&input[idx*192+128..idx*192+160])
-					.map_err(|_| Error::from("Invalid b argument real coeff x coordinate"))?;
-
-				let b_b_x = Fq::from_slice(&input[idx*192+160..idx*192+192])
-					.map_err(|_| Error::from("Invalid b argument real coeff y coordinate"))?;
-
-				let b_a = Fq2::new(b_a_x, b_a_y);
-				let b_b = Fq2::new(b_b_x, b_b_y);
-				let b = if b_a.is_zero() && b_b.is_zero() {
-					G2::zero()
-				} else {
-					G2::from(AffineG2::new(b_a, b_b).map_err(|_| Error::from("Invalid b argument - not on curve"))?)
-				};
-				let a = if a_x.is_zero() && a_y.is_zero() {
-					G1::zero()
-				} else {
-					G1::from(AffineG1::new(a_x, a_y).map_err(|_| Error::from("Invalid a argument - not on curve"))?)
-				};
-				vals.push((a, b));
-			};
-
-			let mul = vals.into_iter().fold(Gt::one(), |s, (a, b)| s * pairing(a, b));
-
-			if mul == Gt::one() {
-				bn::arith::U256::one()
+			let b_a = Fq2::new(b_a_x, b_a_y);
+			let b_b = Fq2::new(b_b_x, b_b_y);
+			let b = if b_a.is_zero() && b_b.is_zero() {
+				G2::zero()
 			} else {
-				bn::arith::U256::zero()
-			}
+				G2::from(AffineG2::new(b_a, b_b).map_err(|_| Error::from("Invalid b argument - not on curve"))?)
+			};
+			let a = if a_x.is_zero() && a_y.is_zero() {
+				G1::zero()
+			} else {
+				G1::from(AffineG1::new(a_x, a_y).map_err(|_| Error::from("Invalid a argument - not on curve"))?)
+			};
+			vals.push((a, b));
 		};
 
-		let mut buf = [0u8; 32];
-		ret_val.to_big_endian(&mut buf).expect("Cannot fail since 0..32 is 32-byte length");;
-		output.write(0, &buf);
+		let mul = vals.into_iter().fold(Gt::one(), |s, (a, b)| s * pairing(a, b));
 
-		Ok(())
-	}
+		if mul == Gt::one() {
+			bn::arith::U256::one()
+		} else {
+			bn::arith::U256::zero()
+		}
+	};
+
+	let mut buf = [0u8; 32];
+	ret_val.to_big_endian(&mut buf).expect("Cannot fail since 0..32 is 32-byte length");;
+	output.write(0, &buf);
+
+	Ok(())
+}
 
 #[cfg(test)]
 mod tests {
