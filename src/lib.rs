@@ -239,6 +239,25 @@ mod tests {
 			assert_eq!(output, expected);
 		}
 
+		// zero-point multiplication (ecmul_0-3_5616_28000_96)
+		{
+			let input = FromHex::from_hex("\
+				0000000000000000000000000000000000000000000000000000000000000000\
+				0000000000000000000000000000000000000000000000000000000000000003\
+				30644e72e131a029b85045b68181585d2833e84879b9709143e1f593f0000000\
+				0000000000000000000000000000000000000000000000000000000000000000"
+			).unwrap();
+
+			let mut output = vec![0u8; 64];
+			let expected = FromHex::from_hex("\
+				0000000000000000000000000000000000000000000000000000000000000000\
+				0000000000000000000000000000000000000000000000000000000000000000"
+			).unwrap();
+
+			bn128_mul(&input[..], &mut BytesRef::Fixed(&mut output[..])).expect("Builtin should not fail");
+			assert_eq!(output, expected);
+		}
+
 		// should fail - point not on curve
 		{
 			let input = FromHex::from_hex("\
