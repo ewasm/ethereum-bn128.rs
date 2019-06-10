@@ -10,5 +10,4 @@ publish = false
 [dependencies]
 bn = { git = "https://github.com/paritytech/bn", default-features = false }
 ethereum-types = "0.3"
-parity-bytes = { git = "https://github.com/paritytech/parity-common" }
 rustc-hex = "1.0"
