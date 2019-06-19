@@ -9,7 +9,13 @@ jobs:
       - run:
           name: Update environment
           command: |
+            rustup component add rustfmt
             rustup update
+      - run:
+           name: Check formatting
+           command: |
+             rustfmt --version
+             cargo fmt --all -- --check
       - run:
           name: Build
           command: cargo build --release
