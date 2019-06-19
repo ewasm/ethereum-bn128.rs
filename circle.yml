@@ -7,6 +7,10 @@ jobs:
     steps:
       - checkout
       - run:
+          name: Update environment
+          command: |
+            rustup update
+      - run:
           name: Build
           command: cargo build --release
       - run:
