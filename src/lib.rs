@@ -111,7 +111,7 @@ pub fn bn128_mul(input: &[u8], output: &mut [u8; 64]) -> Result<(), Error> {
 ///     - any of odd points does not belong to bn128 curve
 ///     - any of even points does not belong to the twisted bn128 curve over the field F_p^2 = F_p[i] / (i^2 + 1)
 pub fn bn128_pairing(input: &[u8], output: &mut [u8; 32]) -> Result<(), Error> {
-    use bn::{pairing, AffineG1, AffineG2, Fq, Fq2, Group, Gt, G1, G2};
+    use bn::{pairing_batch, AffineG1, AffineG2, Fq, Fq2, Group, Gt, G1, G2};
 
     if input.len() % 192 != 0 {
         return Err("Invalid input length, must be multiple of 192 (3 * (32*2))".into());
@@ -162,9 +162,7 @@ pub fn bn128_pairing(input: &[u8], output: &mut [u8; 32]) -> Result<(), Error> {
             vals.push((a, b));
         }
 
-        let mul = vals
-            .into_iter()
-            .fold(Gt::one(), |s, (a, b)| s * pairing(a, b));
+        let mul = pairing_batch(&vals);
 
         if mul == Gt::one() {
             bn::arith::U256::one()
