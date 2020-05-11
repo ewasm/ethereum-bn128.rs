@@ -8,6 +8,6 @@ description = "Ethereum BN128 helpers for Rust"
 publish = false
 
 [dependencies]
-bn = { git = "https://github.com/paritytech/bn", default-features = false }
+bn = { git = "https://github.com/paritytech/bn", default-features = false, rev = "6079255e" }
 ethereum-types = "0.3"
 rustc-hex = "1.0"
