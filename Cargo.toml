@@ -2,7 +2,7 @@
 name = "ethereum-bn128"
 version = "0.1.1"
 authors = ["Parity Technologies <admin@parity.io>","Alex Beregszaszi <alex@rtfs.hu>"]
-license = "GPL-3.0"
+license = "MIT OR Apache-2.0"
 repository = "https://github.com/ewasm/ethereum-bn128.rs"
 description = "Ethereum BN128 helpers for Rust"
 publish = false
